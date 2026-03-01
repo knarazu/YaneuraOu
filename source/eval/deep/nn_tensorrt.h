@@ -96,6 +96,10 @@ namespace Eval::dlshogi
 		InferUniquePtr<nvinfer1::IExecutionContext> infer_context;
 		nvinfer1::Dims inputDims1;
 		nvinfer1::Dims inputDims2;
+		int inputIndex1 = -1;
+		int inputIndex2 = -1;
+		int outputIndex1 = -1;
+		int outputIndex2 = -1;
 
 		// 初回のみ、ビルドが必要。シリアライズされたファイルを生成する。
 		void build(const std::string& onnx_filename);

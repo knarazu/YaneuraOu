@@ -1928,7 +1928,7 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
         CpuIndex    cpu     = *cfg.nodes[idx].begin();  // get a CpuIndex from NumaIndex
         NumaIndex   sys_idx = cfg_sys.is_cpu_assigned(cpu) ? cfg_sys.nodeByCpu.at(cpu) : 0;
         std::string s       = cfg_sys.to_string() + "$" + std::to_string(sys_idx);
-        return static_cast<std::size_t>(hash_string(s));
+        return std::hash<std::string>{}(s);
     }
 
     void ensure_present(NumaIndex idx) const {
@@ -2059,27 +2059,6 @@ inline NumaReplicatedBase::~NumaReplicatedBase() {
 
 inline const NumaConfig& NumaReplicatedBase::get_numa_config() const {
     return context->get_numa_config();
-}
-
-
-// 🌈 やねうら王ではThreadIds構造体でまとめて管理する。
-
-namespace Search {
-
-	// StockfishのWorker, Threadで渡している構造体。
-	struct ThreadIds
-	{
-		size_t threadIdx;
-		size_t numaThreadIdx;
-		size_t numaTotal;
-		NumaReplicatedAccessToken numaAccessToken;
-	};
-
-	class Worker;
-    struct SharedState;
-
-	// Worker派生classのfactory
-	typedef std::function<LargePagePtr<Worker>(SharedState& sharedState, const ThreadIds& ids)> WorkerFactory;
 }
 
 } // namespace YaneuraOu

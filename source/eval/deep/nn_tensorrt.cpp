@@ -258,7 +258,11 @@ namespace Eval::dlshogi
 		profile->setDimensions("input2", nvinfer1::OptProfileSelector::kOPT, nvinfer1::Dims4(max_batch_size, dims2[1], dims2[2], dims2[3]));
 		profile->setDimensions("input2", nvinfer1::OptProfileSelector::kMAX, nvinfer1::Dims4(max_batch_size, dims2[1], dims2[2], dims2[3]));
 		config->addOptimizationProfile(profile);
+		#if (NV_TENSORRT_MAJOR > 8) || (NV_TENSORRT_MAJOR == 8 && NV_TENSORRT_MINOR >= 5)
 		config->setMemoryPoolLimit(nvinfer1::MemoryPoolType::kWORKSPACE, 64_MiB);
+		#else
+		config->setMaxWorkspaceSize(64_MiB);
+		#endif
 
 		// TensorRT 8 より nvinfer1::IBuilder::buildSerializedNetwork() が追加され、 nvinfer1::IBuilder::buildEngineWithConfig() は非推奨となった。
 		// nvinfer1::IBuilder::buildEngineWithConfig() は TensorRT 10.0 にて削除される見込み。
@@ -378,8 +382,17 @@ namespace Eval::dlshogi
 				return Tools::ResultCode::FileWriteError;
 		}
 
+		#if (NV_TENSORRT_MAJOR > 8) || (NV_TENSORRT_MAJOR == 8 && NV_TENSORRT_MINOR >= 5)
 		inputDims1 = infer_engine->getTensorShape("input1");
 		inputDims2 = infer_engine->getTensorShape("input2");
+		#else
+		inputIndex1 = infer_engine->getBindingIndex("input1");
+		inputIndex2 = infer_engine->getBindingIndex("input2");
+		outputIndex1 = infer_engine->getBindingIndex("output_policy");
+		outputIndex2 = infer_engine->getBindingIndex("output_value");
+		inputDims1 = infer_engine->getBindingDimensions(inputIndex1);
+		inputDims2 = infer_engine->getBindingDimensions(inputIndex2);
+		#endif
 
 		return Tools::ResultCode::Ok;
 	}
@@ -388,8 +401,13 @@ namespace Eval::dlshogi
 	{
 		inputDims1.d[0] = batch_size;
 		inputDims2.d[0] = batch_size;
+		#if (NV_TENSORRT_MAJOR > 8) || (NV_TENSORRT_MAJOR == 8 && NV_TENSORRT_MINOR >= 5)
 		infer_context->setInputShape("input1", inputDims1);
 		infer_context->setInputShape("input2", inputDims2);
+		#else
+		infer_context->setBindingDimensions(inputIndex1, inputDims1);
+		infer_context->setBindingDimensions(inputIndex2, inputDims2);
+		#endif
 #if defined(UNPACK_CUDA)
 		checkCudaErrors(cudaMemcpyAsync(p1_dev, p1, sizeof(PType) * ((batch_size * ((int)COLOR_NB * (int)MAX_FEATURES1_NUM * (int)SQ_NB) + 7) >> 3), cudaMemcpyHostToDevice, cudaStreamPerThread));
 		checkCudaErrors(cudaMemcpyAsync(p2_dev, p2, sizeof(PType) * ((batch_size * ((int)MAX_FEATURES2_NUM) + 7) >> 3), cudaMemcpyHostToDevice, cudaStreamPerThread));
@@ -399,11 +417,20 @@ namespace Eval::dlshogi
 		checkCudaErrors(cudaMemcpyAsync(x1_dev, x1, sizeof(NN_Input1) * batch_size, cudaMemcpyHostToDevice, cudaStreamPerThread));
 		checkCudaErrors(cudaMemcpyAsync(x2_dev, x2, sizeof(NN_Input2) * batch_size, cudaMemcpyHostToDevice, cudaStreamPerThread));
 #endif
+		#if (NV_TENSORRT_MAJOR > 8) || (NV_TENSORRT_MAJOR == 8 && NV_TENSORRT_MINOR >= 5)
 		infer_context->setTensorAddress("input1", x1_dev);
 		infer_context->setTensorAddress("input2", x2_dev);
 		infer_context->setTensorAddress("output_policy", y1_dev);
 		infer_context->setTensorAddress("output_value", y2_dev);
 		const bool status = infer_context->enqueueV3(cudaStreamPerThread);
+		#else
+		void* bindings[4] = { nullptr, nullptr, nullptr, nullptr };
+		bindings[inputIndex1] = x1_dev;
+		bindings[inputIndex2] = x2_dev;
+		bindings[outputIndex1] = y1_dev;
+		bindings[outputIndex2] = y2_dev;
+		const bool status = infer_context->enqueueV2(bindings, cudaStreamPerThread, nullptr);
+		#endif
 		ASSERT_LV3(status);
 		checkCudaErrors(cudaMemcpyAsync(y1, y1_dev, sizeof(NN_Output_Policy) * batch_size, cudaMemcpyDeviceToHost, cudaStreamPerThread));
 		checkCudaErrors(cudaMemcpyAsync(y2, y2_dev, sizeof(NN_Output_Value ) * batch_size, cudaMemcpyDeviceToHost, cudaStreamPerThread));
