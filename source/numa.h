@@ -2061,6 +2061,27 @@ inline const NumaConfig& NumaReplicatedBase::get_numa_config() const {
     return context->get_numa_config();
 }
 
+
+// 🌈 やねうら王ではThreadIds構造体でまとめて管理する。
+
+namespace Search {
+
+	// StockfishのWorker, Threadで渡している構造体。
+	struct ThreadIds
+	{
+		size_t threadIdx;
+		size_t numaThreadIdx;
+		size_t numaTotal;
+		NumaReplicatedAccessToken numaAccessToken;
+	};
+
+	class Worker;
+	struct SharedState;
+
+	// Worker派生classのfactory
+	typedef std::function<LargePagePtr<Worker>(SharedState& sharedState, const ThreadIds& ids)> WorkerFactory;
+}
+
 } // namespace YaneuraOu
 
 #endif  // #ifndef NUMA_H_INCLUDED
